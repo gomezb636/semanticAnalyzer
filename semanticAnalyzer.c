@@ -3,64 +3,69 @@
 #include <ctype.h>
 #include <setjmp.h>
  
-#define AT(CHAR) ( *pos == CHAR && ++pos )
-#define TEST(STR) ( strncmp( pos, STR, strlen(STR) ) == 0 \
-  && ! isalnum(pos[strlen(STR)]) && pos[strlen(STR)] != '_' )
-#define IS(STR) ( TEST(STR) && (pos += strlen(STR)) )
+#define AT(CHAR) ( *curr == CHAR && ++curr )
+#define TEST(STR) ( strncmp( curr, STR, strlen(STR) ) == 0 \
+  && ! isalnum(curr[strlen(STR)]) && curr[strlen(STR)] != '_' )
+#define IS(STR) ( TEST(STR) && (curr += strlen(STR)) )
  
-static char *pos;                                 // current position in source
-static char *startpos;                            // start of source
-static jmp_buf jmpenv;
+static char *curr;
+static char *startPosition;
+static jmp_buf jumpEnvironment;
  
-static int
-error(char *message)
-  {
-  printf("false  %s\n%*s^ %s\n", startpos, pos - startpos + 7, "", message);
-  longjmp( jmpenv, 1 );
+// prints error messages
+static int error(char *message) {
+  printf("false  %s\n%*s^ %s\n", startPosition, curr - startPosition + 7, "", message);
+  longjmp( jumpEnvironment, 1 );
+}
+ 
+// 
+static int expr(int level) {
+  while( isspace(*curr) ) {
+    ++curr;
   }
- 
-static int
-expr(int level)
-  {
-  while( isspace(*pos) ) ++pos;                     // skip white space
-  if( AT('(') )                                     // find a primary (operand)
-    {
+
+  if( AT('(') ) {
     if( expr(0) && ! AT(')') ) error("missing close paren");
-    }
+  }
   else if( level <= 4 && IS("not") && expr(6) ) { }
-  else if( TEST("or") || TEST("and") || TEST("not") )
-    {
+  else if( TEST("or") || TEST("and") || TEST("not") ) {
     error("expected a primary, found an operator");
-    }
-  else if( isdigit(*pos) ) pos += strspn( pos, "0123456789" );
-  else if( isalpha(*pos) ) pos += strspn( pos, "0123456789_"
+  }
+  else if( isdigit(*curr) ) curr += strspn( curr, "0123456789" );
+  else if( isalpha(*curr) ) curr += strspn( curr, "0123456789_"
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" );
   else error("expected a primary");
  
-  do                    // then look for zero or more valid following operators
-    {
-    while( isspace(*pos) ) ++pos;
-    }
+  do {
+    while( isspace(*curr) ) ++curr;
+  }
+
   while(
     level <= 2 && IS("or") ? expr(3) :
     level <= 3 && IS("and") ? expr(4) :
     level <= 4 && (AT('=') || AT('<')) ? expr(5) :
-    level == 5 && (*pos == '=' || *pos == '<') ? error("non-associative") :
+    level == 5 && (*curr == '=' || *curr == '<') ? error("non-associative") :
     level <= 6 && (AT('+') || AT('-')) ? expr(7) :
     level <= 7 && (AT('*') || AT('/')) ? expr(8) :
     0 );
+
   return 1;
-  }
- 
-static void
-parse(char *source)
-  {
-  startpos = pos = source;
-  if( setjmp(jmpenv) ) return; // for catching errors during recursion
+}
+
+// validates parse
+static void parse(char *start) {
+  startPosition = curr = start;
+
+  if( setjmp(jumpEnvironment) ) return;
+
   expr(0);
-  if( *pos ) error("unexpected character following valid parse");
-  printf(" true  %s\n", source);
+
+  if( *curr ) {
+    error("unexpected character following valid parse");
   }
+
+  printf(" true  %s\n", start);
+}
  
 static char *tests[] = {
   "3 + not 5",
@@ -88,9 +93,10 @@ static char *tests[] = {
   "a + b - c * d / e < f and not ( g = h )",
   "$",
   };
- 
-int
-main(int argc, char *argv[])
-  {
-  for( int i = 0; i < sizeof(tests)/sizeof(*tests); i++ ) parse(tests[i]);
-  }
+
+
+int main(int a, char *b[]) {
+  for( int i = 0; i < sizeof(tests)/sizeof(*tests); i++ ){
+    parse(tests[i]);
+  } 
+}
